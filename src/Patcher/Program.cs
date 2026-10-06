@@ -37,6 +37,7 @@ static class GamePatcher
     const string ExeName = "Terraria.exe";
     const string BackupName = "Terraria.exe.orig";
     const string HookFileName = "GameHook.dll";
+    const string LiveLogPathFileName = "GameHook.livelog";
     const string HookAssemblyName = "GameHook";
     const string HookTypeName = "GameHook.Hook";
     const string HookMethodName = "OnTick";
@@ -87,6 +88,30 @@ static class GamePatcher
             File.Delete(temp);
         }
         Console.WriteLine($"Patched {exe}.");
+
+        WriteLiveLogPath(gameDir);
+    }
+
+    /// <summary>
+    /// Tells GameHook where LiveLog.exe is so the game can open it
+    /// </summary>
+    static void WriteLiveLogPath(string gameDir)
+    {
+        string pathFile = Path.Combine(gameDir, LiveLogPathFileName);
+        string patcherProjectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\.."));
+        string binTail = Path.GetRelativePath(patcherProjectDir, AppContext.BaseDirectory); // bin\Debug\net10.0
+        string liveLog = Path.GetFullPath(Path.Combine(patcherProjectDir, @"..\LiveLog", binTail, "LiveLog.exe"));
+
+        if (File.Exists(liveLog))
+        {
+            File.WriteAllText(pathFile, liveLog);
+            Console.WriteLine($"LiveLog will open with the game ({liveLog}).");
+        }
+        else
+        {
+            File.Delete(pathFile);
+            Console.WriteLine($"LiveLog not found at {liveLog}; the game will not open it.");
+        }
     }
 
     static void WritePatched(string gameDir, string backup, string hookSource, string temp)
@@ -128,6 +153,7 @@ static class GamePatcher
         // exe first then hook for restoring
         File.Copy(backup, exe, overwrite: true);
         File.Delete(hookTarget);
+        File.Delete(Path.Combine(gameDir, LiveLogPathFileName));
         File.Delete(backup);
         Console.WriteLine($"Restored {exe}.");
     }

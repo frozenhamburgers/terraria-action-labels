@@ -16,8 +16,8 @@ namespace GameHook
     /// </summary>
     public static class Hook
     {
-        // flush once a second at 60 ticks/s
-        private const int FlushEveryTicks = 60;
+        // flush every tick so LiveLog can follow the file live. one ~60 byte WriteFile per tick is negligible next to a 16 ms frame
+        private const int FlushEveryTicks = 1;
 
         // one bit per trigger in a ulong
         private const int MaxTriggers = 64;
@@ -96,7 +96,26 @@ namespace GameHook
             _writer.Write(known.Count - _triggerNames.Length);
             _writer.Write("}\n");
 
+            StartLiveLog();
             _initialized = true;
+        }
+        
+        private static void StartLiveLog()
+        {
+            try
+            {
+                string gameDir = AppDomain.CurrentDomain.BaseDirectory;
+                string pathFile = Path.Combine(gameDir, "GameHook.livelog");
+                if (!File.Exists(pathFile))
+                    return;
+                string exe = File.ReadAllText(pathFile).Trim();
+                if (File.Exists(exe))
+                    Process.Start(exe, "\"" + gameDir.TrimEnd('\\') + "\"");
+            }
+            catch
+            {
+                // own try so a bad path does not disable all logging
+            }
         }
 
         /// <summary>
