@@ -1,0 +1,17 @@
+bin/
+obj/
+
+local.props
+
+.idea/
+.vs/
+*.user
+.mcp.json
+
+/docs/
+
+# game files must never be committed if accidently added to working dir
+Terraria.exe
+*.exe.orig
+GameHookLogs/
+decompiled/

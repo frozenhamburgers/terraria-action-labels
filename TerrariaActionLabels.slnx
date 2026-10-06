@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GameHook/GameHook.csproj" />
+    <Project Path="src/Patcher/Patcher.csproj" />
+  </Folder>
+</Solution>

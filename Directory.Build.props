@@ -1,0 +1,4 @@
+<Project>
+  <!-- machine-specific paths can be configured via local.props -->
+  <Import Project="$(MSBuildThisFileDirectory)local.props" Condition="Exists('$(MSBuildThisFileDirectory)local.props')" />
+</Project>

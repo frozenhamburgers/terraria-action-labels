@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Terraria targets: .NET Framework 4.0 Client Profile -->
+    <TargetFramework>net40</TargetFramework>
+    <RootNamespace>GameHook</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- cCompile against the game, but dont copy it to output to prevent duplication -->
+    <Reference Include="Terraria">
+      <HintPath>$(TerrariaDir)\Terraria.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CheckTerrariaDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(TerrariaDir)\Terraria.exe')"
+           Text="Terraria.exe not found in TerrariaDir='$(TerrariaDir)'. Create local.props at the repo root (see Directory.Build.props)." />
+  </Target>
+
+</Project>
