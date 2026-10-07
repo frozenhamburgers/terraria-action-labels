@@ -9,6 +9,7 @@ This repository contains patcher code  that you run against your own copy of the
 
 - Windows, with Terraria 1.4.5.8 installed. The patcher refuses any other version.
 - .NET 10 SDK (x64).
+- Python 3.10+ with `pip install -r analysis/requirements.txt`, for loading logs.
 
 ## Setup
 
@@ -71,6 +72,17 @@ world pixels, `slot` the inventory index of the item in hand, and `menu` is 1 on
 the main menu. The rest is the player's state after the tick: position,
 velocity, health, flight time and whether or not they're dead, then the Eye of
 Cthulhu (only while it's alive) and the nearest Servants of Cthulhu.
+
+## Loading logs
+
+`analysis/load.py` turns a log into a DataFrame, one row per tick, with a `t` column in seconds:
+
+```python
+from load import load
+ticks, triggers = load(r"C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl")
+```
+
+Bit *i* of `held` is `triggers[i]`.
 
 ## Restore
 
