@@ -61,7 +61,7 @@ game tick to `GameHookLogs/gamehook-<timestamp>.jsonl` inside the game folder:
 ```
 {"ev":"start","freq":10000000}
 {"ev":"triggers","names":["MouseLeft","MouseRight","Up",...],"dropped":0}
-{"ev":"tick","ts":123456789,"tick":4213,"held":65,"menu":0,"ax":182,"ay":-40,"slot":0,"px":33605.5,"py":6531,"vx":-3.25,"vy":0,"hp":400,"hpMax":400,"wing":0,"rocket":7,"dead":0}
+{"ev":"tick","ts":123456789,"tick":4213,"held":65,"menu":0,"ax":182,"ay":-40,"slot":0,"px":33605.5,"py":6531,"vx":-3.25,"vy":0,"hp":400,"hpMax":400,"wing":0,"rocket":7,"dead":0,"bx":33900,"by":6300,"bvx":1.5,"bvy":-2,"bhp":2800,"bhpMax":2800,"bphase":0,"sn":1,"s0x":33700,"s0y":6450,"s0vx":2.1,"s0vy":0.4}
 ```
 
 `ts` is a `Stopwatch` timestamp. Divide it by `freq` to get seconds.
@@ -69,7 +69,8 @@ game tick to `GameHookLogs/gamehook-<timestamp>.jsonl` inside the game folder:
 tick (65 = MouseLeft + Jump). `ax`/`ay` is the cursor relative to the player in
 world pixels, `slot` the inventory index of the item in hand, and `menu` is 1 on
 the main menu. The rest is the player's state after the tick: position,
-velocity, health, flight time and whether or not they're dead.
+velocity, health, flight time and whether or not they're dead, then the Eye of
+Cthulhu (only while it's alive) and the nearest Servants of Cthulhu.
 
 ## Restore
 

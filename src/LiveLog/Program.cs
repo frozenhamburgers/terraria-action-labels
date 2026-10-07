@@ -152,6 +152,14 @@ sealed class LogFollower : IDisposable
         float wing = Float(root, "wing");
         int rocket = root.GetProperty("rocket").GetInt32();
         bool dead = root.GetProperty("dead").GetInt32() != 0;
+        int servants = root.GetProperty("sn").GetInt32();
+        // boss fields are only written while an Eye of Cthulhu is active
+        string boss = "";
+        if (root.TryGetProperty("bhp", out JsonElement bhp))
+        {
+            float dist = MathF.Sqrt(MathF.Pow(Float(root, "bx") - px, 2) + MathF.Pow(Float(root, "by") - py, 2));
+            boss = $"  EoC {bhp.GetInt32(),4}/{root.GetProperty("bhpMax").GetInt32(),-4} ph {Float(root, "bphase"):F0} dist {dist,5:F0}";
+        }
 
         _firstTs ??= ts;
         // The counter goes up by exactly one per tick, so a jump means rows were lost.
@@ -169,7 +177,7 @@ sealed class LogFollower : IDisposable
         string gapNote = gap != 0 ? $"  [GAP {gap}]" : "";
         Print($"{tick,8} {seconds,9:F3}s {(menu ? "MENU" : "    ")} slot {slot,2} aim {ax,5},{ay,5}" +
               $"  hp {hp,3}/{hpMax,-3} pos {px,7:F0},{py,6:F0} vel {vx,5:F1},{vy,5:F1} wing {wing,4:F0} rkt {rocket,2} {(dead ? "DEAD" : "    ")}" +
-              $"  {Decode(held)}{gapNote}");
+              $"{boss}  sv {servants}  {Decode(held)}{gapNote}");
     }
 
     // GameHook writes null for NaN/Infinity

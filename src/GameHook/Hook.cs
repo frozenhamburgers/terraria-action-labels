@@ -7,6 +7,7 @@ using System.Text;
 using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.GameInput;
+using Terraria.ID;
 using Terraria.Testing;
 
 namespace GameHook
@@ -24,6 +25,9 @@ namespace GameHook
         // one bit per trigger in a ulong
         private const int MaxTriggers = 64;
 
+        // nearest servants written per tick, a fixed count so every row has the same columns
+        private const int MaxServants = 3;
+
         // No field initializers since they could throw outside our try/catch
         private static StreamWriter _writer;
         private static string[] _triggerNames;
@@ -31,6 +35,8 @@ namespace GameHook
         private static bool _disabled;
         private static uint _lastTick;
         private static int _ticksSinceFlush;
+        private static NPC[] _nearest;
+        private static float[] _nearestDist;
 
         /// <summary>
         /// Called once per XNA Update, which can be more often than once per
@@ -72,6 +78,9 @@ namespace GameHook
             string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GameHookLogs");
             Directory.CreateDirectory(dir);
             string path = Path.Combine(dir, "gamehook-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".jsonl");
+
+            _nearest = new NPC[MaxServants];
+            _nearestDist = new float[MaxServants];
 
             _writer = new StreamWriter(path, false, new UTF8Encoding(false), 64 * 1024);
             AppDomain.CurrentDomain.ProcessExit += (s, e) => Disable();
@@ -156,6 +165,7 @@ namespace GameHook
             {
                 WriteAction(player);
                 WritePlayer(player);
+                WriteNpcs(player);
             }
             _writer.Write("}\n");
         }
@@ -195,6 +205,81 @@ namespace GameHook
             WriteField("wing", player.wingTime);
             WriteField("rocket", player.rocketTime);
             WriteField("dead", player.dead ? 1 : 0);
+        }
+
+        /// <summary>
+        /// The Eye of Cthulhu, if one is active, and the servants of cthulhu nearest to the player
+        /// </summary>
+        private static void WriteNpcs(Player player)
+        {
+            Vector2 center = player.Center;
+            NPC boss = null;
+            int servants = 0;
+            int kept = 0;
+
+            // same for loop the game uses for searching NPCs
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC npc = Main.npc[i];
+                if (npc == null || !npc.active)
+                    continue;
+
+                if (npc.type == NPCID.EyeofCthulhu)
+                {
+                    if (boss == null)
+                        boss = npc;
+                }
+                else if (npc.type == NPCID.ServantofCthulhu)
+                {
+                    servants++;
+                    // insertion into a short sorted list, nearest first
+                    float dist = Vector2.DistanceSquared(npc.Center, center);
+                    int at = kept < MaxServants ? kept++ : MaxServants;
+                    while (at > 0 && _nearestDist[at - 1] > dist)
+                    {
+                        if (at < MaxServants)
+                        {
+                            _nearest[at] = _nearest[at - 1];
+                            _nearestDist[at] = _nearestDist[at - 1];
+                        }
+                        at--;
+                    }
+                    if (at < MaxServants)
+                    {
+                        _nearest[at] = npc;
+                        _nearestDist[at] = dist;
+                    }
+                }
+            }
+
+            if (boss != null)
+            {
+                Vector2 bossCenter = boss.Center;
+                WriteField("bx", bossCenter.X);
+                WriteField("by", bossCenter.Y);
+                WriteField("bvx", boss.velocity.X);
+                WriteField("bvy", boss.velocity.Y);
+                WriteField("bhp", boss.life);
+                WriteField("bhpMax", boss.lifeMax);
+                WriteField("bphase", boss.ai[0]);
+            }
+
+            WriteField("sn", servants);
+            for (int k = 0; k < kept; k++)
+            {
+                NPC npc = _nearest[k];
+                Vector2 c = npc.Center;
+                WriteServantField(k, "x", c.X);
+                WriteServantField(k, "y", c.Y);
+                WriteServantField(k, "vx", npc.velocity.X);
+                WriteServantField(k, "vy", npc.velocity.Y);
+                _nearest[k] = null; // NPC references sjouldnt persist between ticks
+            }
+        }
+
+        private static void WriteServantField(int index, string suffix, float value)
+        {
+            WriteField("s" + index + suffix, value);
         }
 
         private static void WriteField(string name, long value)
