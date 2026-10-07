@@ -83,12 +83,22 @@ In a world, press:
 - **F5** to start a fight you play. The first press builds arena and gear, and every press restores that snapshot, sets the time to night and spawns the Eye of Cthulhu.
 - **F6** to reset the same way and replay the actions of your last F5 fight. Don't touch the keyboard or
   mouse while it runs.
+- **F7** to run the evaluation: the idle, random and keep-distance (`kite`) baselines play 10 episodes each,
+  back to back, with the same 10 seeds. Leave the game alone until it prints "Evaluation done".
+
+Each episode has a seed for the game's random numbers. F5 picks a new one, and F6 reuses the one it replays.
 
 An episode ends on a win, your death, the Eye leaving, or after 3 minutes. The log marks it with
 `reset` and `end` lines. To check that a replay matched the fight:
 
 ```
 python analysis/replay_check.py "C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl"
+```
+
+To score every episode in a log by who played it (win rate, mean survival time, mean damage dealt):
+
+```
+python analysis/evaluate.py "C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl"
 ```
 
 ## Loading logs

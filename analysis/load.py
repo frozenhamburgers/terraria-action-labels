@@ -13,7 +13,7 @@ FLOAT_FIELDS = ["px", "py", "vx", "vy", "wing", "bx", "by", "bvx", "bvy", "bphas
 
 def load(path):
     """Returns (ticks, triggers, episodes): one row per tick, the trigger name for each bit of
-    `held`, and one row per episode (mode, result, steps). Ticks have an `ep` column, the
+    `held`, and one row per episode (mode, seed, result, steps). Ticks have an `ep` column, the
     episode they belong to or -1. Fields a row doesn't have (e.g. boss fields with no boss) become NaN."""
     freq, triggers, rows, episodes = None, [], [], []
     ep = -1
@@ -28,7 +28,7 @@ def load(path):
                 rows.append(obj)
             elif obj["ev"] == "reset":
                 ep = len(episodes)
-                episodes.append({"ep": ep, "mode": obj["mode"], "result": None, "steps": None})
+                episodes.append({"ep": ep, "mode": obj["mode"], "seed": obj.get("seed"), "result": None, "steps": None})
             elif obj["ev"] == "end":
                 episodes[ep].update(result=obj["result"], steps=obj["steps"])
                 ep = -1
@@ -44,4 +44,4 @@ def load(path):
         if name in ticks:
             ticks[name] = ticks[name].astype(np.float64)
     ticks.insert(0, "t", (ticks["ts"] - ticks["ts"].iloc[0]) / freq)
-    return ticks, triggers, pd.DataFrame(episodes, columns=["ep", "mode", "result", "steps"])
+    return ticks, triggers, pd.DataFrame(episodes, columns=["ep", "mode", "seed", "result", "steps"])

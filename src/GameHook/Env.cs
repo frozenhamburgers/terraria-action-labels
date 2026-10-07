@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Terraria;
@@ -7,11 +8,13 @@ using Terraria.DataStructures;
 using Terraria.GameInput;
 using Terraria.ID;
 using Terraria.Testing;
+using Terraria.Utilities;
 
 namespace GameHook
 {
     /// <summary>
-    /// Episodes against the Eye of Cthulhu. F5 resets/starts, F6 resets and replays last fight.
+    /// Episodes against the Eye of Cthulhu. F5 resets/starts, F6 resets and replays last fight,
+    /// F7 runs the evaluation: every baseline agent for EvalEpisodes episodes, seeds 0 to EvalEpisodes - 1.
     /// Reset restores the game's own gameplay snapshot (Terraria.Testing.StateSnapshot, the one behind /checkpoint),
     /// taken once per session after building the arena and loadout, so every episode starts from the same state and RNG seeding
     /// </summary>
@@ -19,6 +22,9 @@ namespace GameHook
     {
         private const Keys PlayKey = Keys.F5;
         private const Keys ReplayKey = Keys.F6;
+        private const Keys EvalKey = Keys.F7;
+
+        private const int EvalEpisodes = 10;
 
         private const int MaxEpisodeTicks = 60 * 60 * 3;
 
@@ -38,25 +44,32 @@ namespace GameHook
         {
             None,
             Play,
-            Replay
-        }
-
-        private struct Action
-        {
-            public ulong Held;
-            public int Ax;
-            public int Ay;
+            Replay,
+            Agent
         }
 
         private static Mode _mode;
         private static StateSnapshot _checkpoint;
         private static int _bossIndex;
         private static int _step;
-        private static List<Action> _actions;      // what this episode did, or is replaying
-        private static List<Action> _lastPlayed;   // the last episode you played, for F6
-        private static Action _applied;            // the action the game used on the last world update
+        private static int _seed;
+        private static IAgent _agent;
+        private static List<Controls> _actions;    // what this episode did, or is replaying
+        private static List<Controls> _lastPlayed; // the last episode you played, for F6
+        private static int _lastPlayedSeed;
+        private static Controls _applied;          // the action the game used on the last world update
+        private static IAgent[] _evalAgents;
+        private static bool _evaluating;
+        private static int _evalNext;              // index of the next evaluation episode
         private static bool _playWasDown;
         private static bool _replayWasDown;
+        private static bool _evalWasDown;
+
+        /// <summary>The arena is centered on world spawn.</summary>
+        public static float ArenaMiddleX
+        {
+            get { return Main.spawnTileX * 16 + 8; }
+        }
 
         public static bool InEpisode
         {
@@ -87,12 +100,41 @@ namespace GameHook
 
             bool playDown = KeyDown(PlayKey);
             bool replayDown = KeyDown(ReplayKey);
+            bool evalDown = KeyDown(EvalKey);
             if (playDown && !_playWasDown)
-                Start(Mode.Play);
+            {
+                _evaluating = false;
+                Start(Mode.Play, null, Environment.TickCount & int.MaxValue);
+            }
             else if (replayDown && !_replayWasDown && _lastPlayed != null)
-                Start(Mode.Replay);
+            {
+                _evaluating = false;
+                Start(Mode.Replay, null, _lastPlayedSeed);
+            }
+            else if (evalDown && !_evalWasDown)
+            {
+                _evalAgents = new IAgent[] { new IdleAgent(), new RandomAgent(), new KiteAgent() };
+                _evaluating = true;
+                _evalNext = 0;
+            }
             _playWasDown = playDown;
             _replayWasDown = replayDown;
+            _evalWasDown = evalDown;
+
+            // the next evaluation episode starts as soon as the last one ends
+            if (_mode == Mode.None && _evaluating)
+            {
+                if (_evalNext < _evalAgents.Length * EvalEpisodes)
+                {
+                    Start(Mode.Agent, _evalAgents[_evalNext / EvalEpisodes], _evalNext % EvalEpisodes);
+                    _evalNext++;
+                }
+                else
+                {
+                    _evaluating = false;
+                    Main.NewText("Evaluation done");
+                }
+            }
         }
 
         /// <summary>
@@ -104,7 +146,7 @@ namespace GameHook
             if (_mode == Mode.None)
                 return;
 
-            Action action;
+            Controls action;
             if (_mode == Mode.Play)
             {
                 action = ReadPlayer();
@@ -113,9 +155,16 @@ namespace GameHook
             }
             else
             {
-                if (_step >= _actions.Count)
-                    return; // CheckEnd stops the episode on the next tick
-                action = _actions[_step];
+                if (_mode == Mode.Replay)
+                {
+                    if (_step >= _actions.Count)
+                        return; // CheckEnd stops the episode on the next tick
+                    action = _actions[_step];
+                }
+                else
+                {
+                    action = _agent.Act(Main.LocalPlayer, Main.npc[_bossIndex]);
+                }
                 ApplyHeld(action.Held);
                 ApplyAim(action);
             }
@@ -123,7 +172,7 @@ namespace GameHook
             _step++;
         }
 
-        private static void Start(Mode mode)
+        private static void Start(Mode mode, IAgent agent, int seed)
         {
             Player player = Main.LocalPlayer;
             if (_checkpoint == null)
@@ -139,6 +188,7 @@ namespace GameHook
             // not part of the snapshot. The Eye leaves when it is day
             Main.dayTime = false;
             Main.time = 0;
+            Reseed(seed);
 
             // its own named RNG, which the snapshot reset, so the boss spawns identically every time
             using (Main.SwapRandom("GameHookBossSpawn"))
@@ -152,12 +202,32 @@ namespace GameHook
             PlayerInput.Triggers.Current.Reset();
 
             if (mode == Mode.Play)
-                _actions = new List<Action>();
+                _actions = new List<Controls>();
             else
                 _actions = _lastPlayed;
+            if (agent != null)
+                agent.Begin(seed);
+            _agent = agent;
             _mode = mode;
+            _seed = seed;
             _step = 0;
-            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + (mode == Mode.Play ? "play" : "replay") + "\"}");
+
+            string name = mode == Mode.Play ? "play" : mode == Mode.Replay ? "replay" : agent.Name;
+            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + name + "\",\"seed\":" + seed + "}");
+        }
+
+        /// <summary>
+        /// Gives every world RNG the episode's seed. The snapshot restores them all to the same state,
+        /// so without this the same actions would always play out the same way.
+        /// </summary>
+        private static void Reseed(int seed)
+        {
+            FieldInfo field = typeof(Main).GetField("_rngs", BindingFlags.NonPublic | BindingFlags.Static);
+            Dictionary<string, UnifiedRandom> restored = (Dictionary<string, UnifiedRandom>)field.GetValue(null);
+            Dictionary<string, UnifiedRandom> rngs = new Dictionary<string, UnifiedRandom>();
+            foreach (string key in restored.Keys)
+                rngs[key] = new UnifiedRandom(seed);
+            field.SetValue(null, rngs); // a new dictionary, so the snapshot's copy is never touched
         }
 
         private static void CheckEnd()
@@ -180,7 +250,10 @@ namespace GameHook
             }
 
             if (_mode == Mode.Play)
+            {
                 _lastPlayed = _actions;
+                _lastPlayedSeed = _seed;
+            }
             _mode = Mode.None;
             Hook.WriteEvent("{\"ev\":\"end\",\"result\":\"" + result + "\",\"steps\":" + _step + "}");
         }
@@ -196,11 +269,11 @@ namespace GameHook
             }
         }
 
-        private static Action ReadPlayer()
+        private static Controls ReadPlayer()
         {
             Player player = Main.LocalPlayer;
             Vector2 aim = Main.MouseWorld - player.Center;
-            Action action;
+            Controls action;
             action.Held = Hook.ReadHeldTriggers();
             action.Ax = (int)Math.Round(aim.X);
             action.Ay = (int)Math.Round(aim.Y);
@@ -220,7 +293,7 @@ namespace GameHook
         /// Points the cursor at player center + aim. Used when playing too, so a replay sees the
         /// exact same aim
         /// </summary>
-        private static void ApplyAim(Action action)
+        private static void ApplyAim(Controls action)
         {
             Player player = Main.LocalPlayer;
             Vector2 c = player.Center;
