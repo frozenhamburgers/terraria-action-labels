@@ -16,10 +16,11 @@ import torch.nn.functional as F
 
 from load import load
 
-BUTTONS = ["Left", "Right", "Jump", "MouseLeft"]
+BUTTONS = ["Left", "Right", "Jump", "Down", "MouseLeft"]  # Down drops through platforms
 AIM_DIRECTIONS = 16  # Agents.AimDirections in GameHook
 HISTORY = 4          # states per input
 SPACING = 5          # ticks between them
+ACTIONS = 15         # past ticks of buttons per input, so holds and double taps can be learned
 HIDDEN = 128
 
 # same scales as MlpAgent.cs
@@ -72,14 +73,19 @@ def frame_features(rows, ox, oy):
 
 def episode_samples(rows, ox, oy, bits):
     """Inputs and targets for every step but the first. Row t holds step t's action and the state
-    after it, so step t is predicted from rows t-1, t-1-SPACING, ... (clamped to row 0)."""
+    after it, so step t is predicted from rows t-1, t-1-SPACING, ... (clamped to row 0), followed
+    by the buttons of steps t-1 to t-ACTIONS (none before the episode started)."""
     features = frame_features(rows, ox, oy)
+    held = rows["held"].values.astype(np.uint64)
+    all_buttons = np.stack([(held >> np.uint64(b)) & np.uint64(1) for b in bits], axis=1).astype(np.float32)
+    all_buttons = np.concatenate([np.zeros((ACTIONS, len(bits)), np.float32), all_buttons])  # row t is at ACTIONS + t
+
     steps = np.arange(1, len(rows))
     x = np.concatenate(
-        [features[np.maximum(steps - 1 - h * SPACING, 0)] for h in range(HISTORY)], axis=1)
+        [features[np.maximum(steps - 1 - h * SPACING, 0)] for h in range(HISTORY)]
+        + [all_buttons[ACTIONS + steps - k] for k in range(1, ACTIONS + 1)], axis=1)
 
-    held = rows["held"].values.astype(np.uint64)[steps]
-    buttons = np.stack([(held >> np.uint64(b)) & np.uint64(1) for b in bits], axis=1).astype(np.float32)
+    buttons = all_buttons[ACTIONS + steps]
 
     angle = np.arctan2(rows["ay"].values[steps], rows["ax"].values[steps])
     aim = np.round(angle / (2 * np.pi / AIM_DIRECTIONS)).astype(np.int64) % AIM_DIRECTIONS
@@ -120,6 +126,7 @@ def export(model, path, test_input):
     with open(path, "w", encoding="utf-8") as f:
         f.write(f"history {HISTORY} {SPACING}\n")
         f.write(f"buttons {len(BUTTONS)} {' '.join(BUTTONS)}\n")
+        f.write(f"actions {ACTIONS}\n")
         f.write(f"aims {AIM_DIRECTIONS}\n")
         f.write(f"layers {len(layers)}\n")
         for layer in layers:
@@ -156,6 +163,9 @@ def main():
     train = stack([episodes[i] for i in order[n_val:]])
     val = stack([episodes[i] for i in order[:n_val]])
     print(f"{len(episodes) - n_val} training episodes ({len(train[0])} steps), {n_val} validation ({len(val[0])} steps)")
+    # accuracy of always guessing a button's more common value, which the model should beat
+    rates = val[1].mean(0).tolist()
+    print(f"{'baseline':26}" + " ".join(f"{b} {max(r, 1 - r):.2f}" for b, r in zip(BUTTONS, rates)))
 
     inputs = train[0].shape[1]
     model = nn.Sequential(

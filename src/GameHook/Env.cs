@@ -36,8 +36,8 @@ namespace GameHook
         // arena in tiles: layers of wooden platforms above world spawn, with the space above the lowest cleared
         private const int ArenaHalfWidth = 100;
         private const int ArenaHeight = 50;
-        private const int ArenaFloorAboveSpawn = 20;
-        private const int PlatformLayers = 3;
+        private const int ArenaFloorAboveSpawn = 12;
+        private const int PlatformLayers = 4;
         private const int PlatformSpacing = 8;
 
         // the boss appears this far above the player, in pixels

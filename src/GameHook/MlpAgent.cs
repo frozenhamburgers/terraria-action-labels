@@ -26,11 +26,14 @@ namespace GameHook
         private int _history;      // states per input
         private int _spacing;      // ticks between them
         private string[] _buttons; // trigger names of the button outputs
+        private int _actions;      // past steps of buttons per input
         private int _aims;         // aim directions after the buttons
         private List<float[,]> _weights; // [out, in] per layer
         private List<float[]> _biases;
 
         private readonly List<float[]> _frames = new List<float[]>(); // features at each step of this episode
+        private readonly List<ulong> _held = new List<ulong>();       // buttons it held at each step
+        private Random _rng;                                           // samples the buttons
         private readonly NPC[] _nearest = new NPC[Servants];
         private readonly float[] _nearestDist = new float[Servants];
 
@@ -61,6 +64,8 @@ namespace GameHook
             agent._buttons = new string[nextInt()];
             for (int i = 0; i < agent._buttons.Length; i++)
                 agent._buttons[i] = next();
+            expect("actions");
+            agent._actions = nextInt();
             expect("aims");
             agent._aims = nextInt();
 
@@ -98,6 +103,8 @@ namespace GameHook
         public void Begin(int seed)
         {
             _frames.Clear();
+            _held.Clear();
+            _rng = new Random(seed);
         }
 
         public Controls Act(Player player, NPC boss)
@@ -106,21 +113,34 @@ namespace GameHook
             int i = _frames.Count;
             _frames.Add(Features(player, boss));
 
-            float[] input = new float[_history * FrameSize];
+            float[] input = new float[_history * FrameSize + _actions * _buttons.Length];
             for (int h = 0; h < _history; h++)
             {
                 // train.py clamps to row 0, the state after step 0, which is frame 1 here
                 int k = Math.Max(i - h * _spacing, Math.Min(i, 1));
                 Array.Copy(_frames[k], 0, input, h * FrameSize, FrameSize);
             }
+            // then the buttons of steps i-1 to i-_actions, nothing pressed before the episode
+            int at = _history * FrameSize;
+            for (int k = 1; k <= _actions; k++)
+            {
+                ulong held = i - k >= 0 ? _held[i - k] : 0;
+                for (int b = 0; b < _buttons.Length; b++)
+                    input[at++] = (held & Agents.Bit(_buttons[b])) != 0 ? 1 : 0;
+            }
             float[] output = Forward(input);
 
+            // sampled rather than pressed when above 0.5: starting or releasing a press has a small
+            // chance on any one tick, which a threshold would never act on, so it would never start
+            // moving from rest, and never let go once moving
             Controls c = new Controls();
             for (int b = 0; b < _buttons.Length; b++)
             {
-                if (output[b] > 0) // logit > 0 is probability > 0.5
+                double p = 1 / (1 + Math.Exp(-output[b]));
+                if (_rng.NextDouble() < p)
                     c.Held |= Agents.Bit(_buttons[b]);
             }
+            _held.Add(c.Held);
             int best = 0;
             for (int a = 1; a < _aims; a++)
             {

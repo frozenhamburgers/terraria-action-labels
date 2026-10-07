@@ -111,8 +111,7 @@ F5 fights (the default), or a baseline such as `--mode kite`. It writes `GameHoo
 python analysis/train.py "C:\path\to\your\Terraria copy\GameHookLogs\*.jsonl" --mode play --out "C:\path\to\your\Terraria copy\GameHookPolicy.txt"
 ```
 
-With that file in the game folder, F9 evaluates the policy, as `mlp`. The log gets a `policy` line
-with `testMaxDiff`, how far GameHook's forward pass is from PyTorch's on a test input; it should be near 0.
+With that file in the game folder, F9 evaluates the policy, as `mlp`.
 
 ## Loading logs
 
@@ -142,6 +141,35 @@ the backup.
 |---|---:|---:|---:|---:|---:|
 | kite | 100 | 1.00 | 41.92 | 1.00 | 0.52 |
 
+### The MLP
+
+A behavior cloning policy: given the recent states of a fight, it predicts the action the cloned
+player took next. Trained by `analysis/train.py`, run in game by `MlpAgent.cs`.
+
+**Inputs (112).** The states after the last 4 steps, 5 ticks apart (1, 6, 11 and 16 ticks back),
+28 features each:
+
+| Part | Features |
+|---|---|
+| Player (6) | position relative to the arena's middle and lowest platform, velocity, life fraction, wing time left |
+| Boss (7) | present flag, offset from the player, velocity, life fraction, phase |
+| 3 nearest servants (5 each) | present flag, offset from the player, velocity |
+
+Positions are divided by 1000 px and velocities by 10 px/tick, so most features fall in -1 to 1. Missing boss or servant is all zeros.
+
+**Outputs (20).** 4 button logits (Left, Right, Jump, MouseLeft) and 16 aim logits, one per
+direction around the player (22.5° apart, 200 px out). The model holds a button when its
+probability is above 0.5, and aims in the most likely direction.
+
+**Network.** Two hidden layers of 128 with ReLU (112 -> 128 -> 128 -> 20, about 33k parameters).
+
+**Training.** Loss is binary cross-entropy for each button + cross-entropy for the aim. Adam
+(learning rate 1e-3), batches of 256. 20% of episodes are held out for validation, since
+neighbouring ticks are nearly identical, and the epoch with the lowest validation loss is exported.
+
+**In game.** Weights are exported as text with a test input. GameHook runs an identical forward pass in
+C#.
+
 ### MLP - Trained on 100 Kite Episodes for 30 Epochs, Evaluated on 30 Episodes
 **Best validation loss:** 0.062
 
@@ -157,8 +185,54 @@ the backup.
 
 ### MLP - Trained on 41 Human Play Episodes for 30 Epochs, Evaluated on 50 Episodes
 
+This model displayed behaviors such as aiming for minions, as well as ducking under and jumping over the boss.
+However, behaviors unique to Human Play such as dashes and flying were missing.
+
 **Best validation loss:** 0.585
+
 
 | Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
 |---|---:|---:|---:|---:|---:|
 | mlp | 50 | 0.90 | 55.55 | 0.97 | 0.71 |
+
+### New MLP - Trained on 41 Human Play Episodes for 30 Epochs, Evaluated on 50 Episodes
+
+Same data and network as above, with three changes aimed at the missing behaviors:
+
+- **Button history as input:** Besides the last 4 states, each input holds the buttons pressed on
+  each of the last 15 steps (`ACTIONS` in `train.py`). From states alone the model can't tell that it
+  just tapped a direction (for a dash) or is in the middle of a flight, so it can't complete multi-tick patterns.
+- **Sampled buttons:** Each tick a button is pressed with the probability the model gives it, instead
+  of whenever that probability is above 0.5. The model learns a small chance per tick of starting or
+  releasing a press, which a 0.5 cutoff never acts on. With the history added, the cutoff left it
+  standing still at the start and holding one direction once moving. The samples come from an RNG
+  seeded per episode, so episodes are still reproducible.
+- **Down as an output**, for dropping through platforms.
+
+So the network is 187 → 128 → 128 → 21: 112 state inputs plus 15 steps × 5 buttons, and 5 button
+outputs plus 16 aim outputs.
+
+Validation loss isn't directly comparable to the previous model's, since this one predicts one more
+button and sees its own past buttons.
+
+Visually, much closer to Human Play behavior, weaving over and under the boss, 
+and utilizing both dashes and extended flight.
+
+**Best validation loss:** 0.474
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| mlp | 50 | 0.92 | 59.60 | 0.98 | 0.66 |
+
+### New MLP - 41 Play Episodes for 30 Epochs, Evaluated on 50 Episodes + Extra Platforms
+
+The results of the new MLP above may look similar, but were actually the result of
+polarization. Once descending below the bottom platform, flying back up was very difficult
+and required the player to stand on a specific elevation and use the entirety of their
+wing duration. Thus, the model performed well if it never dropped below the lowest platform,
+and poorly if it did. Adding another intermediate platform resulted in the below results, comparable
+to the MLP trained on 100 Kite episodes.
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| mlp | 50 | 0.98 | 54.30 | 1.00 | 0.51 |
