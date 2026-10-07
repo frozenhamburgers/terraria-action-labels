@@ -8,6 +8,12 @@ you run against a copy of the game.
 
 ## Part 1: Patch & Environment
 
+
+
+https://github.com/user-attachments/assets/4b19794f-8c71-45f8-bd1f-e32cb35bcb19
+
+
+
 Two calls injected into the game's update loop via Mono.Cecil provide the following:
 
 - **State and action log:** Every tick is written as one JSON line:
@@ -24,6 +30,12 @@ Two calls injected into the game's update loop via Mono.Cecil provide the follow
 where the input changed), started with the patched game.
 
 ## Part 2: Demonstration
+
+
+
+https://github.com/user-attachments/assets/3a91f926-de2b-42ef-8122-ff9cd9760dfc
+
+
 
 A small MLP trained in PyTorch on about 30 minutes of recorded fights, then run through the
 harness. Forward pass is written in C# inside the game.
