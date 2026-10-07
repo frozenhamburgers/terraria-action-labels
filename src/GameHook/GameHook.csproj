@@ -17,6 +17,11 @@
       <HintPath>$(windir)\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Main derives from Game, so calling its static methods needs this -->
+    <Reference Include="Microsoft.Xna.Framework.Game">
+      <HintPath>$(windir)\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework.Game\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.Game.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="CheckTerrariaDir" BeforeTargets="ResolveAssemblyReferences">

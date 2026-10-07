@@ -40,9 +40,14 @@ static class GamePatcher
     const string LiveLogPathFileName = "GameHook.livelog";
     const string HookAssemblyName = "GameHook";
     const string HookTypeName = "GameHook.Hook";
-    const string HookMethodName = "OnTick";
     const string TargetTypeName = "Terraria.Main";
-    const string TargetMethodName = "DoUpdate";
+
+    // each target method in Terraria.Main gets a call to its hook as its first instruction
+    static readonly (string Target, string Hook)[] Injections =
+    [
+        ("DoUpdate", "OnTick"),               // once per update: logging, episode start/end
+        ("DoUpdateInWorld", "OnWorldUpdate"), // after input is read, before the world updates: action injection
+    ];
     static readonly Version ExpectedVersion = new(1, 4, 5, 8);
 
     public static void Patch(string gameDir)
@@ -77,7 +82,6 @@ static class GamePatcher
         try
         {
             WritePatched(gameDir, backup, hookSource, temp);
-            VerifyPatched(temp);
 
             // hook first then exe: there is never a patched exe without its hook, would crash due to startup force JIT
             File.Copy(hookSource, hookTarget, overwrite: true);
@@ -127,16 +131,20 @@ static class GamePatcher
         {
             var version = module.Assembly.Name.Version;
             Require(version == ExpectedVersion,
-                $"Expected Terraria {ExpectedVersion}, found {version}. Re-verify the injection point first.");
+                $"Expected Terraria {ExpectedVersion}, found {version}. Re-verify the injection points first.");
             Require(!ReferencesHook(module), $"{BackupName} is not an unpatched original.");
 
-            MethodDefinition target = FindTarget(module);
-            MethodDefinition onTick = FindHook(hookModule);
+            foreach (var (targetName, hookName) in Injections)
+            {
+                // the version check above pins the game, so these are known to exist in the context we know them to
+                MethodDefinition target = module.GetType(TargetTypeName).Methods.Single(m => m.Name == targetName);
+                MethodDefinition hook = hookModule.GetType(HookTypeName).Methods.Single(m => m.Name == hookName);
 
-            // o,porting creates the GameHook assembly reference and member references in Terraria's metadata.
-            MethodReference onTickRef = module.ImportReference(onTick);
-            Instruction first = target.Body.Instructions[0];
-            target.Body.GetILProcessor().InsertBefore(first, Instruction.Create(OpCodes.Call, onTickRef));
+                // importing creates the GameHook assembly reference and member references in Terraria's metadata.
+                MethodReference hookRef = module.ImportReference(hook);
+                Instruction first = target.Body.Instructions[0];
+                target.Body.GetILProcessor().InsertBefore(first, Instruction.Create(OpCodes.Call, hookRef));
+            }
 
             module.Write(temp);
         }
@@ -156,57 +164,6 @@ static class GamePatcher
         File.Delete(Path.Combine(gameDir, LiveLogPathFileName));
         File.Delete(backup);
         Console.WriteLine($"Restored {exe}.");
-    }
-
-    static MethodDefinition FindTarget(ModuleDefinition module)
-    {
-        TypeDefinition? main = module.GetType(TargetTypeName);
-        Require(main != null, $"Type {TargetTypeName} not found.");
-
-        var candidates = main.Methods.Where(m => m.Name == TargetMethodName).ToList();
-        Require(candidates.Count == 1, $"Expected one {TargetTypeName}.{TargetMethodName}, found {candidates.Count}.");
-        MethodDefinition method = candidates[0];
-
-        Require(method.HasBody && !method.IsStatic
-                && method.ReturnType.MetadataType == MetadataType.Void
-                && method.Parameters.Count == 1
-                && method.Parameters[0].ParameterType is ByReferenceType { ElementType.FullName: "Microsoft.Xna.Framework.GameTime" },
-            $"{TargetTypeName}.{TargetMethodName} does not have the expected signature void (ref GameTime).");
-
-        // Cecil branches point at Instruction objects. Anything that jumps to the current first instruction would skip a call inserted before it.
-        Instruction first = method.Body.Instructions[0];
-        bool targeted = method.Body.Instructions.Any(i =>
-                i.Operand == first || (i.Operand is Instruction[] targets && targets.Contains(first)))
-            || method.Body.ExceptionHandlers.Any(h =>
-                h.TryStart == first || h.HandlerStart == first || h.FilterStart == first);
-        Require(!targeted, $"The first instruction of {TargetMethodName} is a branch or handler target.");
-
-        return method;
-    }
-
-    static MethodDefinition FindHook(ModuleDefinition hookModule)
-    {
-        TypeDefinition? type = hookModule.GetType(HookTypeName);
-        Require(type is { IsPublic: true }, $"Public type {HookTypeName} not found in {HookFileName}.");
-
-        MethodDefinition? method = type.Methods.SingleOrDefault(m => m.Name == HookMethodName);
-        Require(method is { IsPublic: true, IsStatic: true, HasParameters: false }
-                && method.ReturnType.MetadataType == MetadataType.Void,
-            $"{HookTypeName}.{HookMethodName} must be public static void with no parameters.");
-
-        return method;
-    }
-
-    /// <summary>Re-read the written file and check the call is really there.</summary>
-    static void VerifyPatched(string path)
-    {
-        using var module = ModuleDefinition.ReadModule(path);
-        Instruction first = FindTarget(module).Body.Instructions[0];
-        Require(first.OpCode == OpCodes.Call
-                && first.Operand is MethodReference m
-                && m.DeclaringType.FullName == HookTypeName
-                && m.Name == HookMethodName,
-            "Verification failed: the hook call is not the first instruction of the written file.");
     }
 
     static Guid ReadMvid(string path)

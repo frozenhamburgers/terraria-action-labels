@@ -52,8 +52,9 @@ The patcher:
 
 1. backs up `Terraria.exe` to `Terraria.exe.orig` the first time it runs
 2. always patches from that backup, so running it again is safe
-3. inserts a single call to `GameHook.Hook.OnTick()` at the start of
-   `Terraria.Main.DoUpdate`
+3. inserts a call to `GameHook.Hook.OnTick()` at the start of
+   `Terraria.Main.DoUpdate`, and one to `GameHook.Hook.OnWorldUpdate()` at the
+   start of `Terraria.Main.DoUpdateInWorld`
 4. copies `GameHook.dll` into the game folder
 
 Launch `Terraria.exe` directly from that folder. Currently, gameHook writes one line per
@@ -73,16 +74,34 @@ the main menu. The rest is the player's state after the tick: position,
 velocity, health, flight time and whether or not they're dead, then the Eye of
 Cthulhu (only while it's alive) and the nearest Servants of Cthulhu.
 
+## Collecting Data via Episodes
+
+**Use a throwaway character and world.** The first reset in a session changes both, and the game saves them.
+
+In a world, press:
+
+- **F5** to start a fight you play. The first press builds arena and gear, and every press restores that snapshot, sets the time to night and spawns the Eye of Cthulhu.
+- **F6** to reset the same way and replay the actions of your last F5 fight. Don't touch the keyboard or
+  mouse while it runs.
+
+An episode ends on a win, your death, the Eye leaving, or after 3 minutes. The log marks it with
+`reset` and `end` lines. To check that a replay matched the fight:
+
+```
+python analysis/replay_check.py "C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl"
+```
+
 ## Loading logs
 
 `analysis/load.py` turns a log into a DataFrame, one row per tick, with a `t` column in seconds:
 
 ```python
 from load import load
-ticks, triggers = load(r"C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl")
+ticks, triggers, episodes = load(r"C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl")
 ```
 
-Bit *i* of `held` is `triggers[i]`.
+Bit *i* of `held` is `triggers[i]`. `ticks["ep"]` is the episode a row belongs to (-1 for none),
+and `episodes` has each episode's mode, result and length.
 
 ## Restore
 

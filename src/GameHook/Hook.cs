@@ -13,9 +13,10 @@ using Terraria.Testing;
 namespace GameHook
 {
     /// <summary>
-    /// Entry point called by the patched game. The patcher inserts
+    /// Entry points called by the patched game. The patcher inserts
     /// <c>call GameHook.Hook::OnTick()</c> as the first instruction of
-    /// <c>Terraria.Main.DoUpdate</c>.
+    /// <c>Terraria.Main.DoUpdate</c>, and <c>call GameHook.Hook::OnWorldUpdate()</c>
+    /// as the first instruction of <c>Terraria.Main.DoUpdateInWorld</c>.
     /// </summary>
     public static class Hook
     {
@@ -59,6 +60,7 @@ namespace GameHook
 
                 _lastTick = tick;
                 WriteTick(Stopwatch.GetTimestamp(), tick);
+                Env.AfterTick();
 
                 if (++_ticksSinceFlush >= FlushEveryTicks)
                 {
@@ -71,6 +73,37 @@ namespace GameHook
                 // never throw into the game. logging bug should cost data but not crash player's session
                 Disable();
             }
+        }
+
+        /// <summary>
+        /// Called once per world update, after the game read this tick's input. Episodes
+        /// overwrite the input here.
+        /// </summary>
+        public static void OnWorldUpdate()
+        {
+            if (_disabled || !_initialized)
+                return;
+
+            try
+            {
+                Env.BeforeWorldUpdate();
+            }
+            catch
+            {
+                Disable();
+            }
+        }
+
+        internal static string[] TriggerNames
+        {
+            get { return _triggerNames; }
+        }
+
+        /// <summary>Writes one non-tick line, e.g. an episode starting or ending.</summary>
+        internal static void WriteEvent(string json)
+        {
+            _writer.Write(json);
+            _writer.Write('\n');
         }
 
         private static void Initialize()
@@ -133,7 +166,7 @@ namespace GameHook
         /// Current is rebuilt in UpdateInput on every tick, so this is what was held on the
         /// most recent tick. Pressed/released edges are left to the analysis.
         /// </summary>
-        private static ulong ReadHeldTriggers()
+        internal static ulong ReadHeldTriggers()
         {
             Dictionary<string, bool> status = PlayerInput.Triggers.Current.KeyStatus;
             ulong held = 0;
@@ -185,8 +218,18 @@ namespace GameHook
 
             // relative to the player so camera movement between update and draw mostly cancels out
             Vector2 aim = world - player.Center;
-            WriteField("ax", (long)Math.Round(aim.X));
-            WriteField("ay", (long)Math.Round(aim.Y));
+            long ax = (long)Math.Round(aim.X);
+            long ay = (long)Math.Round(aim.Y);
+            if (Env.InEpisode)
+            {
+                // in an episode the game was given an exact aim, so log that instead
+                int ex, ey;
+                Env.GetAppliedAim(out ex, out ey);
+                ax = ex;
+                ay = ey;
+            }
+            WriteField("ax", ax);
+            WriteField("ay", ay);
             WriteField("slot", player.selectedItem);
         }
 

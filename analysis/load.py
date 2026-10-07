@@ -12,9 +12,11 @@ FLOAT_FIELDS = ["px", "py", "vx", "vy", "wing", "bx", "by", "bvx", "bvy", "bphas
 
 
 def load(path):
-    """Returns (ticks, triggers): one row per tick, and the trigger name for each bit of `held`.
-    Fields a row doesn't have (e.g. boss fields with no boss) become NaN."""
-    freq, triggers, rows = None, [], []
+    """Returns (ticks, triggers, episodes): one row per tick, the trigger name for each bit of
+    `held`, and one row per episode (mode, result, steps). Ticks have an `ep` column, the
+    episode they belong to or -1. Fields a row doesn't have (e.g. boss fields with no boss) become NaN."""
+    freq, triggers, rows, episodes = None, [], [], []
+    ep = -1
     with open(path, encoding="utf-8") as f:
         for line in f:
             try:
@@ -22,7 +24,14 @@ def load(path):
             except json.JSONDecodeError:
                 continue  # e.g. the last line, cut off when the game closed
             if obj["ev"] == "tick":
+                obj["ep"] = ep
                 rows.append(obj)
+            elif obj["ev"] == "reset":
+                ep = len(episodes)
+                episodes.append({"ep": ep, "mode": obj["mode"], "result": None, "steps": None})
+            elif obj["ev"] == "end":
+                episodes[ep].update(result=obj["result"], steps=obj["steps"])
+                ep = -1
             elif obj["ev"] == "start":
                 freq = obj["freq"]
             elif obj["ev"] == "triggers":
@@ -35,4 +44,4 @@ def load(path):
         if name in ticks:
             ticks[name] = ticks[name].astype(np.float64)
     ticks.insert(0, "t", (ticks["ts"] - ticks["ts"].iloc[0]) / freq)
-    return ticks, triggers
+    return ticks, triggers, pd.DataFrame(episodes, columns=["ep", "mode", "result", "steps"])
