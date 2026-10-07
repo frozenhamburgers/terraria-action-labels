@@ -61,12 +61,14 @@ game tick to `GameHookLogs/gamehook-<timestamp>.jsonl` inside the game folder:
 ```
 {"ev":"start","freq":10000000}
 {"ev":"triggers","names":["MouseLeft","MouseRight","Up",...],"dropped":0}
-{"ev":"tick","ts":123456789,"tick":4213,"held":65,"menu":0}
+{"ev":"tick","ts":123456789,"tick":4213,"held":65,"ax":182,"ay":-40,"slot":0,"menu":0}
 ```
 
 `ts` is a `Stopwatch` timestamp. Divide it by `freq` to get seconds.
 `held` is a bitmask: bit *i* set means trigger `names[i]` was held on that
-tick (65 = MouseLeft + Jump). `menu` is 1 on the main menu.
+tick (65 = MouseLeft + Jump). `ax`/`ay` is the cursor relative to the player in
+world pixels, `slot` the inventory index of the item in hand, and `menu` is 1 on
+the main menu.
 
 ## Restore
 

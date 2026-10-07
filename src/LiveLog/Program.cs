@@ -4,7 +4,7 @@ using System.Text.Json;
 const string Usage = """
     Usage:
       LiveLog <game dir> [--changes]   Follow the newest GameHookLogs file and print each tick.
-                                      --changes prints a tick only when held/menu changed.
+                                      --changes prints a tick only when held/slot/menu changed.
     """;
 
 if (args.Length is < 1 or > 2 || (args.Length == 2 && args[1] != "--changes"))
@@ -61,6 +61,7 @@ sealed class LogFollower : IDisposable
     uint? _lastTick;
     ulong? _lastHeld;
     bool? _lastMenu;
+    int? _lastSlot;
 
     public LogFollower(string path, bool changesOnly, bool catchUp)
     {
@@ -141,11 +142,15 @@ sealed class LogFollower : IDisposable
         uint tick = root.GetProperty("tick").GetUInt32();
         ulong held = root.GetProperty("held").GetUInt64();
         bool menu = root.GetProperty("menu").GetInt32() != 0;
+        int ax = root.GetProperty("ax").GetInt32();
+        int ay = root.GetProperty("ay").GetInt32();
+        int slot = root.GetProperty("slot").GetInt32();
 
         _firstTs ??= ts;
         // The counter goes up by exactly one per tick, so a jump means rows were lost.
         long gap = _lastTick is uint last ? (long)tick - last - 1 : 0;
-        bool changed = held != _lastHeld || menu != _lastMenu;
+        bool changed = held != _lastHeld || menu != _lastMenu || slot != _lastSlot;
+        _lastSlot = slot;
         _lastTick = tick;
         _lastHeld = held;
         _lastMenu = menu;
@@ -155,7 +160,7 @@ sealed class LogFollower : IDisposable
 
         double seconds = _freq > 0 ? (double)(ts - _firstTs.Value) / _freq : 0;
         string gapNote = gap != 0 ? $"  [GAP {gap}]" : "";
-        Print($"{tick,8} {seconds,9:F3}s {(menu ? "MENU" : "    ")}  {Decode(held)}{gapNote}");
+        Print($"{tick,8} {seconds,9:F3}s {(menu ? "MENU" : "    ")} slot {slot,2} aim {ax,5},{ay,5}  {Decode(held)}{gapNote}");
     }
 
     string Decode(ulong held)

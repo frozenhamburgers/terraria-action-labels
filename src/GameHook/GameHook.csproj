@@ -12,6 +12,11 @@
       <HintPath>$(TerrariaDir)\Terraria.exe</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- for Vector2 -->
+    <Reference Include="Microsoft.Xna.Framework">
+      <HintPath>$(windir)\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="CheckTerrariaDir" BeforeTargets="ResolveAssemblyReferences">

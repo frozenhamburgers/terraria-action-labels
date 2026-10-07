@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
+using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.GameInput;
 using Terraria.Testing;
@@ -50,7 +51,9 @@ namespace GameHook
                     Initialize();
 
                 _lastTick = tick;
-                WriteTick(Stopwatch.GetTimestamp(), tick, ReadHeldTriggers(), Main.gameMenu);
+                int aimX, aimY, slot;
+                ReadAimAndSlot(out aimX, out aimY, out slot);
+                WriteTick(Stopwatch.GetTimestamp(), tick, ReadHeldTriggers(), aimX, aimY, slot, Main.gameMenu);
 
                 if (++_ticksSinceFlush >= FlushEveryTicks)
                 {
@@ -137,7 +140,35 @@ namespace GameHook
             return held;
         }
 
-        private static void WriteTick(long timestamp, uint tick, ulong held, bool menu)
+        /// <summary>
+        /// Cursor position relative to the local player's center, in world pixels, and the
+        /// inventory index of the item in hand
+        /// Main.mouseX is rescaled for zoom and UI scale at various points in the frame
+        /// This function redoes SetZoom_MouseInWorld from scratch
+        /// </summary>
+        private static void ReadAimAndSlot(out int aimX, out int aimY, out int slot)
+        {
+            Player player = Main.LocalPlayer;
+            if (player == null)
+            {
+                aimX = aimY = 0;
+                slot = -1;
+                return;
+            }
+
+            Vector2 mouse = new Vector2(PlayerInput.MouseX, PlayerInput.MouseY);
+            Vector2 screenCenter = new Vector2(PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight) / 2f;
+            float zoom = Main.GameViewMatrix.RenderZoom.X;
+            Vector2 world = Main.screenPosition + screenCenter + (mouse - screenCenter) / zoom;
+
+            // relative to the player so camera movement between update and draw mostly cancels out
+            Vector2 aim = world - player.Center;
+            aimX = (int)Math.Round(aim.X);
+            aimY = (int)Math.Round(aim.Y);
+            slot = player.selectedItem;
+        }
+
+        private static void WriteTick(long timestamp, uint tick, ulong held, int aimX, int aimY, int slot, bool menu)
         {
             _writer.Write("{\"ev\":\"tick\",\"ts\":");
             _writer.Write(timestamp);
@@ -145,6 +176,13 @@ namespace GameHook
             _writer.Write(tick);
             _writer.Write(",\"held\":");
             _writer.Write(held);
+            // ints
+            _writer.Write(",\"ax\":");
+            _writer.Write(aimX);
+            _writer.Write(",\"ay\":");
+            _writer.Write(aimY);
+            _writer.Write(",\"slot\":");
+            _writer.Write(slot);
             _writer.Write(",\"menu\":");
             _writer.Write(menu ? 1 : 0);
             _writer.Write("}\n");
