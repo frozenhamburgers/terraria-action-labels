@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -14,7 +15,7 @@ namespace GameHook
 {
     /// <summary>
     /// Episodes against the Eye of Cthulhu. F5 resets/starts, F6 resets and replays last fight,
-    /// F7 runs the evaluation: every baseline agent for EvalEpisodes episodes, seeds 0 to EvalEpisodes - 1.
+    /// F7 runs the baseline agents and F9 the trained policy, each for EvalEpisodes episodes, seeds 0 to EvalEpisodes - 1.
     /// Reset restores the game's own gameplay snapshot (Terraria.Testing.StateSnapshot, the one behind /checkpoint),
     /// taken once per session after building the arena and loadout, so every episode starts from the same state and RNG seeding
     /// </summary>
@@ -23,8 +24,9 @@ namespace GameHook
         private const Keys PlayKey = Keys.F5;
         private const Keys ReplayKey = Keys.F6;
         private const Keys EvalKey = Keys.F7;
+        private const Keys PolicyKey = Keys.F9; // the game only uses F9 with Shift
 
-        private const int EvalEpisodes = 10;
+        private const int EvalEpisodes = 1;
 
         private const int MaxEpisodeTicks = 60 * 60 * 3;
 
@@ -64,11 +66,18 @@ namespace GameHook
         private static bool _playWasDown;
         private static bool _replayWasDown;
         private static bool _evalWasDown;
+        private static bool _policyWasDown;
 
         /// <summary>The arena is centered on world spawn.</summary>
-        public static float ArenaMiddleX
+        public static int ArenaMiddleX
         {
             get { return Main.spawnTileX * 16 + 8; }
+        }
+
+        /// <summary>Top of the lowest platform, in world pixels.</summary>
+        public static int ArenaFloorY
+        {
+            get { return (Main.spawnTileY - ArenaFloorAboveSpawn) * 16; }
         }
 
         public static bool InEpisode
@@ -101,6 +110,7 @@ namespace GameHook
             bool playDown = KeyDown(PlayKey);
             bool replayDown = KeyDown(ReplayKey);
             bool evalDown = KeyDown(EvalKey);
+            bool policyDown = KeyDown(PolicyKey);
             if (playDown && !_playWasDown)
             {
                 _evaluating = false;
@@ -113,13 +123,18 @@ namespace GameHook
             }
             else if (evalDown && !_evalWasDown)
             {
-                _evalAgents = new IAgent[] { new IdleAgent(), new RandomAgent(), new KiteAgent() };
-                _evaluating = true;
-                _evalNext = 0;
+                StartEvaluation(new IAgent[] { new IdleAgent(), new RandomAgent(), new KiteAgent() });
+            }
+            else if (policyDown && !_policyWasDown)
+            {
+                MlpAgent mlp = LoadPolicy();
+                if (mlp != null)
+                    StartEvaluation(new IAgent[] { mlp });
             }
             _playWasDown = playDown;
             _replayWasDown = replayDown;
             _evalWasDown = evalDown;
+            _policyWasDown = policyDown;
 
             // the next evaluation episode starts as soon as the last one ends
             if (_mode == Mode.None && _evaluating)
@@ -134,6 +149,35 @@ namespace GameHook
                     _evaluating = false;
                     Main.NewText("Evaluation done");
                 }
+            }
+        }
+
+        /// <summary>Plays EvalEpisodes episodes per agent, seeds 0 to EvalEpisodes - 1, starting after the current one.</summary>
+        private static void StartEvaluation(IAgent[] agents)
+        {
+            _evalAgents = agents;
+            _evaluating = true;
+            _evalNext = 0;
+        }
+
+        /// <summary>The trained policy from the game folder, or null with a chat message if there is none.</summary>
+        private static MlpAgent LoadPolicy()
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, MlpAgent.FileName);
+            if (!File.Exists(path))
+            {
+                Main.NewText(MlpAgent.FileName + " not found in the game folder");
+                return null;
+            }
+            try
+            {
+                return MlpAgent.Load(path);
+            }
+            catch (Exception e)
+            {
+                // a bad weights file shouldn't stop the hook, which an exception reaching OnTick would
+                Main.NewText(MlpAgent.FileName + " not loaded: " + e.Message);
+                return null;
             }
         }
 
@@ -213,7 +257,9 @@ namespace GameHook
             _step = 0;
 
             string name = mode == Mode.Play ? "play" : mode == Mode.Replay ? "replay" : agent.Name;
-            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + name + "\",\"seed\":" + seed + "}");
+            // the arena origin, which features measure the player's position from
+            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + name + "\",\"seed\":" + seed +
+                            ",\"ox\":" + ArenaMiddleX + ",\"oy\":" + ArenaFloorY + "}");
         }
 
         /// <summary>

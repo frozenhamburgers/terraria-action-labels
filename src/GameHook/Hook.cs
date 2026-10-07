@@ -255,45 +255,18 @@ namespace GameHook
         /// </summary>
         private static void WriteNpcs(Player player)
         {
-            Vector2 center = player.Center;
             NPC boss = null;
-            int servants = 0;
-            int kept = 0;
-
-            // same for loop the game uses for searching NPCs
             for (int i = 0; i < Main.maxNPCs; i++)
             {
                 NPC npc = Main.npc[i];
-                if (npc == null || !npc.active)
-                    continue;
-
-                if (npc.type == NPCID.EyeofCthulhu)
+                if (npc != null && npc.active && npc.type == NPCID.EyeofCthulhu)
                 {
-                    if (boss == null)
-                        boss = npc;
-                }
-                else if (npc.type == NPCID.ServantofCthulhu)
-                {
-                    servants++;
-                    // insertion into a short sorted list, nearest first
-                    float dist = Vector2.DistanceSquared(npc.Center, center);
-                    int at = kept < MaxServants ? kept++ : MaxServants;
-                    while (at > 0 && _nearestDist[at - 1] > dist)
-                    {
-                        if (at < MaxServants)
-                        {
-                            _nearest[at] = _nearest[at - 1];
-                            _nearestDist[at] = _nearestDist[at - 1];
-                        }
-                        at--;
-                    }
-                    if (at < MaxServants)
-                    {
-                        _nearest[at] = npc;
-                        _nearestDist[at] = dist;
-                    }
+                    boss = npc;
+                    break;
                 }
             }
+            int kept;
+            int servants = FindServants(player.Center, _nearest, _nearestDist, out kept);
 
             if (boss != null)
             {
@@ -318,6 +291,46 @@ namespace GameHook
                 WriteServantField(k, "vy", npc.velocity.Y);
                 _nearest[k] = null; // NPC references sjouldnt persist between ticks
             }
+        }
+
+        /// <summary>
+        /// Puts the servants of cthulhu nearest to center into nearest, nearest first, at most
+        /// nearest.Length of them. kept is how many were put there; returns how many are active in total.
+        /// Shared with MlpAgent so the policy percieves the same servants the log does.
+        /// </summary>
+        internal static int FindServants(Vector2 center, NPC[] nearest, float[] nearestDist, out int kept)
+        {
+            int max = nearest.Length;
+            int servants = 0;
+            kept = 0;
+
+            // same for loop the game uses for searching NPCs
+            for (int i = 0; i < Main.maxNPCs; i++)
+            {
+                NPC npc = Main.npc[i];
+                if (npc == null || !npc.active || npc.type != NPCID.ServantofCthulhu)
+                    continue;
+
+                servants++;
+                // insertion into a short sorted list, nearest first
+                float dist = Vector2.DistanceSquared(npc.Center, center);
+                int at = kept < max ? kept++ : max;
+                while (at > 0 && nearestDist[at - 1] > dist)
+                {
+                    if (at < max)
+                    {
+                        nearest[at] = nearest[at - 1];
+                        nearestDist[at] = nearestDist[at - 1];
+                    }
+                    at--;
+                }
+                if (at < max)
+                {
+                    nearest[at] = npc;
+                    nearestDist[at] = dist;
+                }
+            }
+            return servants;
         }
 
         private static void WriteServantField(int index, string suffix, float value)

@@ -83,8 +83,9 @@ In a world, press:
 - **F5** to start a fight you play. The first press builds arena and gear, and every press restores that snapshot, sets the time to night and spawns the Eye of Cthulhu.
 - **F6** to reset the same way and replay the actions of your last F5 fight. Don't touch the keyboard or
   mouse while it runs.
-- **F7** to run the evaluation: the idle, random and keep-distance (`kite`) baselines play 10 episodes each,
-  back to back, with the same 10 seeds. Leave the game alone until it prints "Evaluation done".
+- **F7** to run the evaluation: the idle, random and keep-distance (`kite`) baselines play `EvalEpisodes`
+  episodes each (set in `Env.cs`), back to back, with the same seeds. Leave the game alone until it prints "Evaluation done".
+- **F9** to evaluate the trained policy (see below) the same way, on the same seeds.
 
 Each episode has a seed for the game's random numbers. F5 picks a new one, and F6 reuses the one it replays.
 
@@ -100,6 +101,18 @@ To score every episode in a log by who played it (win rate, mean survival time, 
 ```
 python analysis/evaluate.py "C:\path\to\your\Terraria copy\GameHookLogs\gamehook-<timestamp>.jsonl"
 ```
+
+## Training a policy
+
+`analysis/train.py` clones an agent from its episodes in one or more logs (globs work): `--mode play` for your
+F5 fights (the default), or a baseline such as `--mode kite`. It writes `GameHookPolicy.txt`:
+
+```
+python analysis/train.py "C:\path\to\your\Terraria copy\GameHookLogs\*.jsonl" --mode play --out "C:\path\to\your\Terraria copy\GameHookPolicy.txt"
+```
+
+With that file in the game folder, F9 evaluates the policy, as `mlp`. The log gets a `policy` line
+with `testMaxDiff`, how far GameHook's forward pass is from PyTorch's on a test input; it should be near 0.
 
 ## Loading logs
 
