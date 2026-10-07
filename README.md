@@ -76,7 +76,7 @@ neighbouring ticks are nearly identical, and the epoch with the lowest validatio
 **In game.** Weights are exported as text with a test input. GameHook runs an identical forward pass in
 C#.
 
-### MLP - Trained on 100 Kite Episodes for 30 Epochs, Evaluated on 30 Episodes
+### MLP - Trained on 100 Kite Episodes for 30 Epochs
 **Best validation loss:** 0.062
 
 | Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
@@ -89,7 +89,7 @@ C#.
 |---|---:|---:|---:|---:|---:|
 | play | 41 | 1.00 | 43.86 | 1.00 | 0.02 |
 
-### MLP - Trained on 41 Human Play Episodes for 30 Epochs, Evaluated on 50 Episodes
+### MLP - Trained on 41 Human Play Episodes for 30 Epochs
 
 This model displayed behaviors such as aiming for minions, as well as ducking under and jumping over the boss.
 However, behaviors unique to Human Play such as dashes and flying were missing.
@@ -101,7 +101,7 @@ However, behaviors unique to Human Play such as dashes and flying were missing.
 |---|---:|---:|---:|---:|---:|
 | mlp | 50 | 0.90 | 55.55 | 0.97 | 0.71 |
 
-### New MLP - Trained on 41 Human Play Episodes for 30 Epochs, Evaluated on 50 Episodes
+### New MLP - Trained on 41 Human Play Episodes for 30 Epochs
 
 Same data and network as above, with three changes aimed at the missing behaviors:
 
@@ -130,7 +130,7 @@ and utilizing both dashes and extended flight.
 |---|---:|---:|---:|---:|---:|
 | mlp | 50 | 0.92 | 59.60 | 0.98 | 0.66 |
 
-### New MLP - 41 Play Episodes for 30 Epochs, Evaluated on 50 Episodes + Extra Platforms
+### New MLP - Trained on 41 Play Episodes for 30 Epochs + Extra Platforms
 
 The results of the new MLP above may look similar, but were actually the result of
 polarization. Once descending below the bottom platform, flying back up was very difficult
