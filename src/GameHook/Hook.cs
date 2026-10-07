@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using Microsoft.Xna.Framework;
 using Terraria;
@@ -51,9 +52,7 @@ namespace GameHook
                     Initialize();
 
                 _lastTick = tick;
-                int aimX, aimY, slot;
-                ReadAimAndSlot(out aimX, out aimY, out slot);
-                WriteTick(Stopwatch.GetTimestamp(), tick, ReadHeldTriggers(), aimX, aimY, slot, Main.gameMenu);
+                WriteTick(Stopwatch.GetTimestamp(), tick);
 
                 if (++_ticksSinceFlush >= FlushEveryTicks)
                 {
@@ -81,8 +80,7 @@ namespace GameHook
             _writer.Write(Stopwatch.Frequency);
             _writer.Write("}\n");
 
-            // Take the names from the running game instead of hardcoding them,
-            // bit i of "held" in every tick row means _triggerNames[i] is held
+            // Take the names from the running game instead of hardcoding them bit i of "held" in every tick row means _triggerNames[i] is held
             List<string> known = PlayerInput.KnownTriggers;
             _triggerNames = known.GetRange(0, Math.Min(known.Count, MaxTriggers)).ToArray();
 
@@ -141,21 +139,35 @@ namespace GameHook
         }
 
         /// <summary>
+        /// One "tick" line: the action read this tick, then the state after it was applied.
+        /// Field meanings are in docs/schema.md.
+        /// </summary>
+        private static void WriteTick(long timestamp, uint tick)
+        {
+            _writer.Write("{\"ev\":\"tick\"");
+            WriteField("ts", timestamp);
+            WriteField("tick", tick);
+            WriteField("held", ReadHeldTriggers());
+            WriteField("menu", Main.gameMenu ? 1 : 0);
+
+            // player fields are left out rather than faked when there is no local player
+            Player player = Main.LocalPlayer;
+            if (player != null)
+            {
+                WriteAction(player);
+                WritePlayer(player);
+            }
+            _writer.Write("}\n");
+        }
+
+        /// <summary>
         /// Cursor position relative to the local player's center, in world pixels, and the
         /// inventory index of the item in hand
         /// Main.mouseX is rescaled for zoom and UI scale at various points in the frame
         /// This function redoes SetZoom_MouseInWorld from scratch
         /// </summary>
-        private static void ReadAimAndSlot(out int aimX, out int aimY, out int slot)
+        private static void WriteAction(Player player)
         {
-            Player player = Main.LocalPlayer;
-            if (player == null)
-            {
-                aimX = aimY = 0;
-                slot = -1;
-                return;
-            }
-
             Vector2 mouse = new Vector2(PlayerInput.MouseX, PlayerInput.MouseY);
             Vector2 screenCenter = new Vector2(PlayerInput.RealScreenWidth, PlayerInput.RealScreenHeight) / 2f;
             float zoom = Main.GameViewMatrix.RenderZoom.X;
@@ -163,29 +175,53 @@ namespace GameHook
 
             // relative to the player so camera movement between update and draw mostly cancels out
             Vector2 aim = world - player.Center;
-            aimX = (int)Math.Round(aim.X);
-            aimY = (int)Math.Round(aim.Y);
-            slot = player.selectedItem;
+            WriteField("ax", (long)Math.Round(aim.X));
+            WriteField("ay", (long)Math.Round(aim.Y));
+            WriteField("slot", player.selectedItem);
         }
 
-        private static void WriteTick(long timestamp, uint tick, ulong held, int aimX, int aimY, int slot, bool menu)
+        /// <summary>
+        /// local player state after this tick's update
+        /// </summary>
+        private static void WritePlayer(Player player)
         {
-            _writer.Write("{\"ev\":\"tick\",\"ts\":");
-            _writer.Write(timestamp);
-            _writer.Write(",\"tick\":");
-            _writer.Write(tick);
-            _writer.Write(",\"held\":");
-            _writer.Write(held);
-            // ints
-            _writer.Write(",\"ax\":");
-            _writer.Write(aimX);
-            _writer.Write(",\"ay\":");
-            _writer.Write(aimY);
-            _writer.Write(",\"slot\":");
-            _writer.Write(slot);
-            _writer.Write(",\"menu\":");
-            _writer.Write(menu ? 1 : 0);
-            _writer.Write("}\n");
+            Vector2 center = player.Center; // position is written as center, same as aim origin
+            WriteField("px", center.X);
+            WriteField("py", center.Y);
+            WriteField("vx", player.velocity.X);
+            WriteField("vy", player.velocity.Y);
+            WriteField("hp", player.statLife);
+            WriteField("hpMax", player.statLifeMax2);
+            WriteField("wing", player.wingTime);
+            WriteField("rocket", player.rocketTime);
+            WriteField("dead", player.dead ? 1 : 0);
+        }
+
+        private static void WriteField(string name, long value)
+        {
+            _writer.Write(",\"");
+            _writer.Write(name);
+            _writer.Write("\":");
+            _writer.Write(value);
+        }
+
+        private static void WriteField(string name, ulong value)
+        {
+            _writer.Write(",\"");
+            _writer.Write(name);
+            _writer.Write("\":");
+            _writer.Write(value);
+        }
+
+        private static void WriteField(string name, float value)
+        {
+            _writer.Write(",\"");
+            _writer.Write(name);
+            _writer.Write("\":");
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                _writer.Write("null");
+            else
+                _writer.Write(value.ToString("0.###", CultureInfo.InvariantCulture));
         }
 
         private static void Disable()

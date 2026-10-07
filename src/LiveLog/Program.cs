@@ -145,6 +145,13 @@ sealed class LogFollower : IDisposable
         int ax = root.GetProperty("ax").GetInt32();
         int ay = root.GetProperty("ay").GetInt32();
         int slot = root.GetProperty("slot").GetInt32();
+        int hp = root.GetProperty("hp").GetInt32();
+        int hpMax = root.GetProperty("hpMax").GetInt32();
+        float px = Float(root, "px"), py = Float(root, "py");
+        float vx = Float(root, "vx"), vy = Float(root, "vy");
+        float wing = Float(root, "wing");
+        int rocket = root.GetProperty("rocket").GetInt32();
+        bool dead = root.GetProperty("dead").GetInt32() != 0;
 
         _firstTs ??= ts;
         // The counter goes up by exactly one per tick, so a jump means rows were lost.
@@ -160,7 +167,16 @@ sealed class LogFollower : IDisposable
 
         double seconds = _freq > 0 ? (double)(ts - _firstTs.Value) / _freq : 0;
         string gapNote = gap != 0 ? $"  [GAP {gap}]" : "";
-        Print($"{tick,8} {seconds,9:F3}s {(menu ? "MENU" : "    ")} slot {slot,2} aim {ax,5},{ay,5}  {Decode(held)}{gapNote}");
+        Print($"{tick,8} {seconds,9:F3}s {(menu ? "MENU" : "    ")} slot {slot,2} aim {ax,5},{ay,5}" +
+              $"  hp {hp,3}/{hpMax,-3} pos {px,7:F0},{py,6:F0} vel {vx,5:F1},{vy,5:F1} wing {wing,4:F0} rkt {rocket,2} {(dead ? "DEAD" : "    ")}" +
+              $"  {Decode(held)}{gapNote}");
+    }
+
+    // GameHook writes null for NaN/Infinity
+    static float Float(JsonElement root, string name)
+    {
+        JsonElement e = root.GetProperty(name);
+        return e.ValueKind == JsonValueKind.Null ? float.NaN : e.GetSingle();
     }
 
     string Decode(ulong held)
