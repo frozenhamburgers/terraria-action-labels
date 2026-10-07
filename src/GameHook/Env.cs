@@ -27,9 +27,9 @@ namespace GameHook
         private const Keys EvalKey = Keys.F7;
         private const Keys PolicyKey = Keys.F9; // the game only uses F9 with Shift
 
-        private const int EvalEpisodes = 30;
-        private const int EvalSpeed = 2; // world updates per 60 Hz frame while evaluating
-        private const int PlaySpeed = 2; // the same while you play (F5). 1 is normal speed
+        private const int EvalEpisodes = 50;
+        private const int EvalSpeed = 10; // world updates per 60 Hz frame while evaluating
+        private const int PlaySpeed = 1; // the same while you play (F5). 1 is normal speed
 
         private const int MaxEpisodeTicks = 60 * 60 * 3;
 
@@ -420,6 +420,7 @@ namespace GameHook
             player.inventory[0].SetDefaults(ItemID.Minishark);
             player.inventory[54].SetDefaults(ItemID.EndlessMusketPouch); // first ammo slot
             player.armor[3].SetDefaults(ItemID.CreativeWings); // Fledgling Wings, first accessory slot
+            player.armor[4].SetDefaults(ItemID.EoCShield); 
             player.selectedItemState.Select(0);
 
             for (int i = 0; i < player.buffType.Length; i++)

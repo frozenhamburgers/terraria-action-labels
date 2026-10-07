@@ -136,15 +136,29 @@ This puts the original `Terraria.exe` back, then removes `GameHook.dll` &
 the backup.
 
 ## Results
-### Kite Algorithm — 100 Episodes
+### Kite Algorithm - 100 Episodes
 
 | Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
 |---|---:|---:|---:|---:|---:|
 | kite | 100 | 1.00 | 41.92 | 1.00 | 0.52 |
 
-### MLP — Trained on 100 Kite Episodes for 30 Epochs, Evaluated on 30 Episodes
+### MLP - Trained on 100 Kite Episodes for 30 Epochs, Evaluated on 30 Episodes
+**Best validation loss:** 0.062
 
 | Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
 |---|---:|---:|---:|---:|---:|
 | mlp | 30 | 1.00 | 44.33 | 1.00 | 0.50 |
 
+### Human Play - 41 Episodes
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| play | 41 | 1.00 | 43.86 | 1.00 | 0.02 |
+
+### MLP - Trained on 41 Human Play Episodes for 30 Epochs, Evaluated on 50 Episodes
+
+**Best validation loss:** 0.585
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| mlp | 50 | 0.90 | 55.55 | 0.97 | 0.71 |
