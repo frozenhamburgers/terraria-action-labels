@@ -83,8 +83,8 @@ In a world, press:
 - **F5** to start a fight you play. The first press builds arena and gear, and every press restores that snapshot, sets the time to night and spawns the Eye of Cthulhu.
 - **F6** to reset the same way and replay the actions of your last F5 fight. Don't touch the keyboard or
   mouse while it runs.
-- **F7** to run the evaluation: the idle, random and keep-distance (`kite`) baselines play `EvalEpisodes`
-  episodes each (set in `Env.cs`), back to back, with the same seeds. Leave the game alone until it prints "Evaluation done".
+- **F7** to run the keep-distance baseline (`kite`) for `EvalEpisodes` episodes (set in `Env.cs`), back to back,
+  seeds 0 to `EvalEpisodes` - 1, at `EvalSpeed` times normal speed. Leave the game alone until it prints "Evaluation done".
 - **F9** to evaluate the trained policy (see below) the same way, on the same seeds.
 
 Each episode has a seed for the game's random numbers. F5 picks a new one, and F6 reuses the one it replays.
@@ -134,3 +134,17 @@ src\Patcher\bin\Debug\net10.0\Patcher.exe restore "C:\path\to\your\Terraria copy
 
 This puts the original `Terraria.exe` back, then removes `GameHook.dll` &
 the backup.
+
+## Results
+### Kite Algorithm — 100 Episodes
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| kite | 100 | 1.00 | 41.92 | 1.00 | 0.52 |
+
+### MLP — Trained on 100 Kite Episodes for 30 Epochs, Evaluated on 30 Episodes
+
+| Mode | Episodes | Win Rate | Survival (s) | Damage | Life Lost |
+|---|---:|---:|---:|---:|---:|
+| mlp | 30 | 1.00 | 44.33 | 1.00 | 0.50 |
+

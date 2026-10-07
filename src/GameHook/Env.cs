@@ -6,6 +6,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Terraria;
 using Terraria.DataStructures;
+using Terraria.Enums;
 using Terraria.GameInput;
 using Terraria.ID;
 using Terraria.Testing;
@@ -15,7 +16,7 @@ namespace GameHook
 {
     /// <summary>
     /// Episodes against the Eye of Cthulhu. F5 resets/starts, F6 resets and replays last fight,
-    /// F7 runs the baseline agents and F9 the trained policy, each for EvalEpisodes episodes, seeds 0 to EvalEpisodes - 1.
+    /// F7 runs the kite baseline and F9 the trained policy, each for EvalEpisodes episodes, seeds 0 to EvalEpisodes - 1, EvalSpeed times faster.
     /// Reset restores the game's own gameplay snapshot (Terraria.Testing.StateSnapshot, the one behind /checkpoint),
     /// taken once per session after building the arena and loadout, so every episode starts from the same state and RNG seeding
     /// </summary>
@@ -26,7 +27,9 @@ namespace GameHook
         private const Keys EvalKey = Keys.F7;
         private const Keys PolicyKey = Keys.F9; // the game only uses F9 with Shift
 
-        private const int EvalEpisodes = 1;
+        private const int EvalEpisodes = 30;
+        private const int EvalSpeed = 2; // world updates per 60 Hz frame while evaluating
+        private const int PlaySpeed = 2; // the same while you play (F5). 1 is normal speed
 
         private const int MaxEpisodeTicks = 60 * 60 * 3;
 
@@ -60,9 +63,11 @@ namespace GameHook
         private static List<Controls> _lastPlayed; // the last episode you played, for F6
         private static int _lastPlayedSeed;
         private static Controls _applied;          // the action the game used on the last world update
-        private static IAgent[] _evalAgents;
-        private static bool _evaluating;
-        private static int _evalNext;              // index of the next evaluation episode
+        private static IAgent _evalAgent;          // null when not evaluating
+        private static int _evalNext;              // seed of the next evaluation episode
+        private static int _speed;                 // world updates per 60 Hz frame, 0 or 1 for normal
+        private static FrameSkipMode _savedFrameSkip;
+        private static TimeSpan _savedTargetElapsed;
         private static bool _playWasDown;
         private static bool _replayWasDown;
         private static bool _evalWasDown;
@@ -99,6 +104,7 @@ namespace GameHook
         {
             if (Main.gameMenu)
             {
+                StopEvaluation();
                 _mode = Mode.None;
                 _checkpoint = null; // a snapshot belongs to one world
                 return;
@@ -113,23 +119,24 @@ namespace GameHook
             bool policyDown = KeyDown(PolicyKey);
             if (playDown && !_playWasDown)
             {
-                _evaluating = false;
+                StopEvaluation();
+                SetSpeed(PlaySpeed);
                 Start(Mode.Play, null, Environment.TickCount & int.MaxValue);
             }
             else if (replayDown && !_replayWasDown && _lastPlayed != null)
             {
-                _evaluating = false;
+                StopEvaluation();
                 Start(Mode.Replay, null, _lastPlayedSeed);
             }
             else if (evalDown && !_evalWasDown)
             {
-                StartEvaluation(new IAgent[] { new IdleAgent(), new RandomAgent(), new KiteAgent() });
+                StartEvaluation(new KiteAgent());
             }
             else if (policyDown && !_policyWasDown)
             {
                 MlpAgent mlp = LoadPolicy();
                 if (mlp != null)
-                    StartEvaluation(new IAgent[] { mlp });
+                    StartEvaluation(mlp);
             }
             _playWasDown = playDown;
             _replayWasDown = replayDown;
@@ -137,27 +144,58 @@ namespace GameHook
             _policyWasDown = policyDown;
 
             // the next evaluation episode starts as soon as the last one ends
-            if (_mode == Mode.None && _evaluating)
+            if (_mode == Mode.None && _evalAgent != null)
             {
-                if (_evalNext < _evalAgents.Length * EvalEpisodes)
+                if (_evalNext < EvalEpisodes)
                 {
-                    Start(Mode.Agent, _evalAgents[_evalNext / EvalEpisodes], _evalNext % EvalEpisodes);
+                    Start(Mode.Agent, _evalAgent, _evalNext);
                     _evalNext++;
                 }
                 else
                 {
-                    _evaluating = false;
+                    StopEvaluation();
                     Main.NewText("Evaluation done");
                 }
             }
         }
 
-        /// <summary>Plays EvalEpisodes episodes per agent, seeds 0 to EvalEpisodes - 1, starting after the current one.</summary>
-        private static void StartEvaluation(IAgent[] agents)
+        /// <summary>Plays EvalEpisodes episodes at EvalSpeed, seeds 0 to EvalEpisodes - 1, starting after the current one.</summary>
+        private static void StartEvaluation(IAgent agent)
         {
-            _evalAgents = agents;
-            _evaluating = true;
+            SetSpeed(EvalSpeed);
+            _evalAgent = agent;
             _evalNext = 0;
+        }
+
+        private static void StopEvaluation()
+        {
+            _evalAgent = null;
+            SetSpeed(1);
+        }
+
+        /// <summary>
+        /// With frame skip On, XNA calls Update every TargetElapsedTime and skips draws to keep up, so
+        /// a shorter target means more world updates per second. Gameplay counts updates, not time, so
+        /// episodes play out the same at any speed. Speed 1 puts the player's own settings back.
+        /// </summary>
+        private static void SetSpeed(int speed)
+        {
+            if (_speed <= 1 && speed > 1)
+            {
+                _savedFrameSkip = Main.FrameSkipMode;
+                _savedTargetElapsed = Main.instance.TargetElapsedTime;
+            }
+            if (speed > 1)
+            {
+                Main.FrameSkipMode = FrameSkipMode.On; // DoUpdate sets IsFixedTimeStep from this every update
+                Main.instance.TargetElapsedTime = TimeSpan.FromTicks(_savedTargetElapsed.Ticks / speed);
+            }
+            else if (_speed > 1)
+            {
+                Main.FrameSkipMode = _savedFrameSkip;
+                Main.instance.TargetElapsedTime = _savedTargetElapsed;
+            }
+            _speed = speed;
         }
 
         /// <summary>The trained policy from the game folder, or null with a chat message if there is none.</summary>
@@ -258,7 +296,7 @@ namespace GameHook
 
             string name = mode == Mode.Play ? "play" : mode == Mode.Replay ? "replay" : agent.Name;
             // the arena origin, which features measure the player's position from
-            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + name + "\",\"seed\":" + seed +
+            Hook.WriteEvent("{\"ev\":\"reset\",\"mode\":\"" + name + "\",\"seed\":" + seed + ",\"speed\":" + Math.Max(_speed, 1) +
                             ",\"ox\":" + ArenaMiddleX + ",\"oy\":" + ArenaFloorY + "}");
         }
 
@@ -299,6 +337,7 @@ namespace GameHook
             {
                 _lastPlayed = _actions;
                 _lastPlayedSeed = _seed;
+                SetSpeed(1);
             }
             _mode = Mode.None;
             Hook.WriteEvent("{\"ev\":\"end\",\"result\":\"" + result + "\",\"steps\":" + _step + "}");

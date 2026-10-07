@@ -42,60 +42,6 @@ namespace GameHook
         }
     }
 
-    /// <summary>Does nothing.</summary>
-    internal sealed class IdleAgent : IAgent
-    {
-        public string Name { get { return "idle"; } }
-
-        public void Begin(int seed) { }
-
-        public Controls Act(Player player, NPC boss)
-        {
-            return new Controls();
-        }
-    }
-
-    /// <summary>
-    /// Every few ticks picks a random move (left, right or neither), jump or not, shoot or not,
-    /// and one of the aim directions, then holds them until the next pick.
-    /// </summary>
-    internal sealed class RandomAgent : IAgent
-    {
-        private const int HoldTicks = 15;
-
-        private Random _rng;
-        private Controls _current;
-        private int _ticks;
-
-        public string Name { get { return "random"; } }
-
-        public void Begin(int seed)
-        {
-            _rng = new Random(seed);
-            _ticks = 0;
-        }
-
-        public Controls Act(Player player, NPC boss)
-        {
-            if (_ticks++ % HoldTicks == 0)
-            {
-                Controls c = new Controls();
-                int move = _rng.Next(3);
-                if (move == 1)
-                    c.Held |= Agents.Bit("Left");
-                else if (move == 2)
-                    c.Held |= Agents.Bit("Right");
-                if (_rng.Next(2) == 0)
-                    c.Held |= Agents.Bit("Jump");
-                if (_rng.Next(2) == 0)
-                    c.Held |= Agents.Bit("MouseLeft");
-                Agents.Aim(ref c, _rng.Next(Agents.AimDirections));
-                _current = c;
-            }
-            return _current;
-        }
-    }
-
     /// <summary>
     /// Shoots at the boss all the time and runs away from it when it gets close horizontally,
     /// turning back toward the middle near the arena's edges. Flies up when the boss is very close.

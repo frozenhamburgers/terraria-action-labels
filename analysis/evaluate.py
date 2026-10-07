@@ -1,4 +1,4 @@
-"""Scores every finished episode in a log, grouped by who played it (play, idle, random, kite, ...).
+"""Scores every finished episode in a log, grouped by who played it (play, kite, mlp, ...).
 
     python evaluate.py <log>
 
