@@ -28,7 +28,7 @@ namespace GameHook
         private const Keys PolicyKey = Keys.F9; // the game only uses F9 with Shift
 
         private const int EvalEpisodes = 50;
-        private const int EvalSpeed = 10; // world updates per 60 Hz frame while evaluating
+        private const int EvalSpeed = 1; // world updates per 60 Hz frame while evaluating
         private const int PlaySpeed = 1; // the same while you play (F5). 1 is normal speed
 
         private const int MaxEpisodeTicks = 60 * 60 * 3;
